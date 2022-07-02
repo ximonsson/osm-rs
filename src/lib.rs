@@ -11,7 +11,6 @@ pub struct Node {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Way {
     id: u64,
-    #[serde(rename = "$value")]
     nodes: Vec<u64>,
 }
 
@@ -27,10 +26,6 @@ pub struct Data {
     pub relations: Vec<Relation>,
 }
 
-pub struct Error {
-    msg: String,
-}
-
 impl Data {
     // Creat an empty `Data` object.
     pub fn new() -> Self {
@@ -42,11 +37,8 @@ impl Data {
     }
 
     // Parse OSM-XML file.
-    pub fn from_filepath(fp: &str) -> Result<Self, E>
-    where
-        E: Error,
-    {
-        serde_xml_rs::from_reader(std::fs::File::open(fp)?)
+    pub fn from_reader(r: impl std::io::Read) -> Result<Self, serde_xml_rs::Error> {
+        serde_xml_rs::from_reader(r)
     }
 }
 
