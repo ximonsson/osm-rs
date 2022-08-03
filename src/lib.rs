@@ -3,20 +3,21 @@ use serde_xml_rs;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Node {
-    id: u64,
+    id: i64,
     lat: f32,
     lon: f32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Way {
-    id: u64,
-    nodes: Vec<u64>,
+    id: i64,
+    #[serde(rename = "$value")]
+    nodes: Vec<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Relation {
-    id: u64,
+    id: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
