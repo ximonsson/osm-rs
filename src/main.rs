@@ -3,17 +3,16 @@ use prost::Message;
 use quick_xml;
 
 fn foo(fp: &str) {
-    //let r = std::io::BufReader::new(std::fs::File::open(fp).unwrap());
-
     let b = std::fs::read(fp).unwrap();
+    let buf: &[u8] = &b;
 
-    let x: &[u8] = &b;
-    //let mut buf = std::io::Cursor::new(x);
+    // get the size of the blobheader
+    let n = u32::from_be_bytes(buf[..4].try_into().unwrap());
+    println!("BlobHeader size: {}", n);
 
-    //let mut buf = bytes::Bytes::from(b);
-
-    let bh = items::BlobHeader::decode(x).unwrap();
-    println!("blob header: {:?}", bh);
+    // decode the BlobHeader
+    let bh = items::BlobHeader::decode(&buf[4..(4 + n as usize)]).unwrap();
+    println!("{:?}", bh);
 }
 
 fn read_xml(fp: &str) -> Result<(), quick_xml::de::DeError> {
