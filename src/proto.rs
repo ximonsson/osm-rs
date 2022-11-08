@@ -19,8 +19,13 @@ pub fn from_reader(mut r: impl std::io::Read) -> std::io::Result<()> {
     // decode blob header
     r.by_ref().take(bhs as u64).read(&mut buf)?;
     let bh = items::BlobHeader::decode(&buf[..bhs as usize]).unwrap();
-
     println!("{:?}", bh);
+
+    // decode blob
+    let n = r.by_ref().take(bh.datasize as u64).read(&mut buf).unwrap();
+    println!("read {} bytes", n);
+    let blob = items::Blob::decode(&buf[..bh.datasize as usize]).unwrap();
+    println!("{:?}", blob);
 
     Ok(())
 }
