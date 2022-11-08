@@ -10,21 +10,26 @@ const MAX_BLOB_SIZE: usize = 32 * 2 ^ 20; // 32MB
 
 pub fn from_reader(mut r: impl std::io::Read) -> std::io::Result<()> {
     // create buffer
-    let mut buf = [0; MAX_BLOB_SIZE];
+    let mut buf: Vec<u8> = Vec::with_capacity(MAX_BLOB_SIZE);
+    //let a: &mut [u8] = &mut buf;
 
     // read blob header size
-    r.by_ref().take(BYTES_BLOB_HEADER_SIZE).read(&mut buf)?;
-    let bhs: u32 = u32::from_be_bytes(buf[..BYTES_BLOB_HEADER_SIZE as usize].try_into().unwrap());
+    r.by_ref()
+        .take(BYTES_BLOB_HEADER_SIZE)
+        .read_to_end(&mut buf)?;
+    let bhs: u32 = u32::from_be_bytes(buf.as_ref().try_into().unwrap());
 
     // decode blob header
     r.by_ref().take(bhs as u64).read(&mut buf)?;
-    let bh = items::BlobHeader::decode(&buf[..bhs as usize]).unwrap();
+    let bh = items::BlobHeader::decode(buf.as_ref()).unwrap();
     println!("{:?}", bh);
 
     // decode blob
-    let n = r.by_ref().take(bh.datasize as u64).read(&mut buf).unwrap();
-    println!("read {} bytes", n);
-    let blob = items::Blob::decode(&buf[..bh.datasize as usize]).unwrap();
+    r.by_ref()
+        .take(bh.datasize as u64)
+        .read_to_end(&mut buf)
+        .unwrap();
+    let blob = items::Blob::decode(buf.as_ref()).unwrap();
     println!("{:?}", blob);
 
     Ok(())
