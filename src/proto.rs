@@ -40,6 +40,17 @@ fn read_blob(mut r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<Blob> {
     Ok(blob)
 }
 
+fn parse_str_tbl(pb: &PrimitiveBlock) -> Vec<String> {
+    let mut st = Vec::<String>::with_capacity(pb.stringtable.s.len());
+
+    for b in &pb.stringtable.s {
+        let s = std::str::from_utf8(&b).unwrap();
+        st.push(s.to_string());
+    }
+
+    return st;
+}
+
 fn decode_blob(b: Blob, h: BlobHeader) {
     let n: usize = match b.raw_size {
         Some(x) => x as usize,
@@ -64,6 +75,12 @@ fn decode_blob(b: Blob, h: BlobHeader) {
         _ => panic!("unrecognized file block!"),
     };
     println!("{:?}", msg);
+
+    let st: Option<Vec<String>> = match msg {
+        FileBlock::PB(m) => Some(parse_str_tbl(&m)),
+        FileBlock::HB(_) => None,
+    };
+    println!("{:?}", st);
 }
 
 pub fn from_reader(mut r: impl Read) -> Result<()> {
@@ -76,6 +93,19 @@ pub fn from_reader(mut r: impl Read) -> Result<()> {
 
     // read blob
     let mut blob = read_blob(r.by_ref(), header.datasize as u64, &mut buf).unwrap();
+    //println!("{:?}", blob);
+
+    // decode the blob to correct
+    decode_blob(blob, header);
+
+    println!("----------------------------");
+
+    // read blob header
+    header = read_blob_header(r.by_ref(), &mut buf).unwrap();
+    println!("{:?}", header);
+
+    // read blob
+    blob = read_blob(r.by_ref(), header.datasize as u64, &mut buf).unwrap();
     //println!("{:?}", blob);
 
     // decode the blob to correct
