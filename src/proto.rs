@@ -34,14 +34,17 @@ fn decode_blob(b: Blob, h: BlobHeader) {
         None => 0,
     };
 
-    let mut buf = vec![0; n];
-    let status = match b.data {
-        Some(Data::ZlibData(x)) => Decompress::new(true)
-            .decompress(&x, &mut buf, FlushDecompress::Finish)
-            .unwrap(),
+    let buf = match b.data {
+        Some(Data::ZlibData(x)) => {
+            let mut buf = vec![0; n];
+            Decompress::new(true)
+                .decompress(&x, &mut buf, FlushDecompress::Finish)
+                .unwrap();
+            buf
+        }
+        Some(Data::Raw(x)) => x,
         _ => todo!("support more"),
     };
-    println!("{:?}", status);
 
     let msg = match h.r#type.as_str() {
         "OSMHeader" => Some(HeaderBlock::decode(buf.as_ref()).unwrap()),
@@ -75,11 +78,11 @@ pub fn from_reader(mut r: impl Read) -> Result<()> {
     println!("----------------------------");
 
     // read blob header
-    let mut header = read_blob_header(r.by_ref(), &mut buf).unwrap();
+    header = read_blob_header(r.by_ref(), &mut buf).unwrap();
     println!("{:?}", header);
 
     // read blob
-    let mut blob = read_blob(r.by_ref(), header.datasize as u64, &mut buf).unwrap();
+    blob = read_blob(r.by_ref(), header.datasize as u64, &mut buf).unwrap();
     println!("{:?}", blob);
 
     Ok(())
