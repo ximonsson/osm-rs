@@ -9,6 +9,12 @@ pub mod items {
 use items::blob::Data;
 use items::*;
 
+#[derive(Debug)]
+enum FileBlock {
+    HB(HeaderBlock),
+    PB(PrimitiveBlock),
+}
+
 const BYTES_BLOB_HEADER_SIZE: u64 = 4;
 const MAX_BLOB_SIZE: usize = 2 ^ 25; // 32MB
 
@@ -26,6 +32,12 @@ fn read_blob_header(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<BlobHeade
     read(r.by_ref(), bhs as u64, &mut buf).unwrap();
     let bh = BlobHeader::decode(buf.as_ref()).unwrap();
     Ok(bh)
+}
+
+fn read_blob(mut r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<Blob> {
+    read(r.by_ref(), n, &mut buf).unwrap();
+    let blob = Blob::decode(buf.as_ref()).unwrap();
+    Ok(blob)
 }
 
 fn decode_blob(b: Blob, h: BlobHeader) {
@@ -47,17 +59,11 @@ fn decode_blob(b: Blob, h: BlobHeader) {
     };
 
     let msg = match h.r#type.as_str() {
-        "OSMHeader" => Some(HeaderBlock::decode(buf.as_ref()).unwrap()),
-        _ => todo!(),
-        //"OSMData" => Some(PrimitiveBlock::decode(buf.as_ref()).unwrap()),
+        "OSMHeader" => FileBlock::HB(HeaderBlock::decode(buf.as_ref()).unwrap()),
+        "OSMData" => FileBlock::PB(PrimitiveBlock::decode(buf.as_ref()).unwrap()),
+        _ => panic!("unrecognized file block!"),
     };
     println!("{:?}", msg);
-}
-
-fn read_blob(mut r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<Blob> {
-    read(r.by_ref(), n, &mut buf).unwrap();
-    let blob = Blob::decode(buf.as_ref()).unwrap();
-    Ok(blob)
 }
 
 pub fn from_reader(mut r: impl Read) -> Result<()> {
@@ -70,7 +76,7 @@ pub fn from_reader(mut r: impl Read) -> Result<()> {
 
     // read blob
     let mut blob = read_blob(r.by_ref(), header.datasize as u64, &mut buf).unwrap();
-    println!("{:?}", blob);
+    //println!("{:?}", blob);
 
     // decode the blob to correct
     decode_blob(blob, header);
@@ -83,7 +89,10 @@ pub fn from_reader(mut r: impl Read) -> Result<()> {
 
     // read blob
     blob = read_blob(r.by_ref(), header.datasize as u64, &mut buf).unwrap();
-    println!("{:?}", blob);
+    //println!("{:?}", blob);
+
+    // decode the blob to correct
+    decode_blob(blob, header);
 
     Ok(())
 }
