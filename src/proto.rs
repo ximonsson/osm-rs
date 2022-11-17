@@ -104,7 +104,11 @@ fn decode_blob(b: Blob, h: BlobHeader) -> FileBlock {
 
 fn read_blob_header(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<BlobHeader> {
     // read blob header size
-    read(r.by_ref(), BYTES_BLOB_HEADER_SIZE, &mut buf).unwrap();
+    if let n = read(r.by_ref(), BYTES_BLOB_HEADER_SIZE, &mut buf).unwrap() {
+        if n == 0 {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "lol"));
+        }
+    }
     let bhs: u32 = u32::from_be_bytes(buf[..BYTES_BLOB_HEADER_SIZE as usize].try_into().unwrap());
 
     // decode blob header
@@ -121,7 +125,10 @@ fn read_blob(mut r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<Blob> {
 
 fn step_reader(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<()> {
     // read blob header
-    let header = read_blob_header(r.by_ref(), &mut buf).unwrap();
+    let header = match read_blob_header(r.by_ref(), &mut buf) {
+        Ok(h) => h,
+        Err(e) => return Err(e),
+    };
     println!("{:?}", header);
 
     // read blob
@@ -146,7 +153,7 @@ pub fn from_reader(mut r: impl Read) -> Result<()> {
     let mut buf: Vec<u8> = Vec::with_capacity(MAX_BLOB_SIZE);
 
     loop {
-        if let Err(e) = step_reader(r.by_ref(), &mut buf) {
+        if let Err(_) = step_reader(r.by_ref(), &mut buf) {
             println!("done!");
             break;
         }
