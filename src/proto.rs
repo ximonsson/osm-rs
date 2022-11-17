@@ -11,8 +11,8 @@ use items::*;
 
 #[derive(Debug)]
 enum FileBlock {
-    HB(HeaderBlock),
-    PB(PrimitiveBlock),
+    Header(HeaderBlock),
+    Primitive(PrimitiveBlock),
 }
 
 const BYTES_BLOB_HEADER_SIZE: u64 = 4;
@@ -21,6 +21,85 @@ const MAX_BLOB_SIZE: usize = 2 ^ 25; // 32MB
 fn read(r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<usize> {
     buf.clear();
     r.take(n).read_to_end(&mut buf)
+}
+
+fn parse_str_tbl(pb: &PrimitiveBlock) -> Vec<String> {
+    let mut st = Vec::<String>::with_capacity(pb.stringtable.s.len());
+
+    for b in &pb.stringtable.s {
+        let s = std::str::from_utf8(&b).unwrap();
+        st.push(s.to_string());
+    }
+
+    st
+}
+
+fn decode_primitive_block(m: &PrimitiveBlock) {
+    let st = parse_str_tbl(&m);
+
+    // TODO check all possible vectors
+
+    for g in &m.primitivegroup {
+        if let Some(dnodes) = &g.dense {
+            let n = dnodes.id.len();
+            println!("we got some dense nodes! {} in total", n);
+
+            let mut id: i64 = 0;
+            let mut lat: i64 = 0;
+            let mut lon: i64 = 0;
+
+            let mut ti: usize = 0;
+            let mut k: &str;
+            let mut v: &str;
+
+            for i in 0..n {
+                id += dnodes.id[i];
+                lat += dnodes.lat[i];
+                lon += dnodes.lon[i];
+
+                //println!("  [{}] @ ({}, {})", id, lat, lon);
+
+                while ti < dnodes.keys_vals.len() {
+                    if dnodes.keys_vals[ti] == 0 {
+                        ti += 1;
+                        break;
+                    }
+                    k = &st[dnodes.keys_vals[ti] as usize];
+                    ti += 1;
+                    v = &st[dnodes.keys_vals[ti] as usize];
+                    ti += 1;
+                    //println!("{} => {}", k, v);
+                }
+            }
+        }
+    }
+}
+
+fn decode_blob(b: Blob, h: BlobHeader) -> FileBlock {
+    let n: usize = match b.raw_size {
+        Some(x) => x as usize,
+        None => 0,
+    };
+
+    let buf = match b.data {
+        Some(Data::ZlibData(x)) => {
+            let mut buf = vec![0; n];
+            Decompress::new(true)
+                .decompress(&x, &mut buf, FlushDecompress::Finish)
+                .unwrap();
+            buf
+        }
+        Some(Data::Raw(x)) => x,
+        _ => todo!("support more"),
+    };
+
+    let msg: FileBlock = match h.r#type.as_str() {
+        "OSMHeader" => FileBlock::Header(HeaderBlock::decode(buf.as_ref()).unwrap()),
+        "OSMData" => FileBlock::Primitive(PrimitiveBlock::decode(buf.as_ref()).unwrap()),
+        x => panic!("[{}] unrecognized file block!", x),
+    };
+
+    msg
 }
 
 fn read_blob_header(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<BlobHeader> {
@@ -40,89 +119,39 @@ fn read_blob(mut r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<Blob> {
     Ok(blob)
 }
 
-fn parse_str_tbl(pb: &PrimitiveBlock) -> Vec<String> {
-    let mut st = Vec::<String>::with_capacity(pb.stringtable.s.len());
+fn step_reader(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<()> {
+    // read blob header
+    let header = read_blob_header(r.by_ref(), &mut buf).unwrap();
+    println!("{:?}", header);
 
-    for b in &pb.stringtable.s {
-        let s = std::str::from_utf8(&b).unwrap();
-        st.push(s.to_string());
-    }
+    // read blob
+    let blob = read_blob(r.by_ref(), header.datasize as u64, &mut buf).unwrap();
 
-    return st;
-}
+    // decode the blob to correct
+    let block = decode_blob(blob, header);
 
-fn decode_blob(b: Blob, h: BlobHeader) {
-    let n: usize = match b.raw_size {
-        Some(x) => x as usize,
-        None => 0,
-    };
-
-    let buf = match b.data {
-        Some(Data::ZlibData(x)) => {
-            let mut buf = vec![0; n];
-            Decompress::new(true)
-                .decompress(&x, &mut buf, FlushDecompress::Finish)
-                .unwrap();
-            buf
+    match block {
+        FileBlock::Header(_) => println!("HeaderBlock"),
+        FileBlock::Primitive(b) => {
+            println!("PrimitiveBlock");
+            decode_primitive_block(&b);
         }
-        Some(Data::Raw(x)) => x,
-        _ => todo!("support more"),
     };
 
-    let msg = match h.r#type.as_str() {
-        "OSMHeader" => FileBlock::HB(HeaderBlock::decode(buf.as_ref()).unwrap()),
-        "OSMData" => FileBlock::PB(PrimitiveBlock::decode(buf.as_ref()).unwrap()),
-        _ => panic!("unrecognized file block!"),
-    };
-    println!("{:?}", msg);
-
-    let st: Option<Vec<String>> = match msg {
-        FileBlock::PB(m) => Some(parse_str_tbl(&m)),
-        FileBlock::HB(_) => None,
-    };
-    println!("{:?}", st);
+    Ok(())
 }
 
 pub fn from_reader(mut r: impl Read) -> Result<()> {
     // create buffer
     let mut buf: Vec<u8> = Vec::with_capacity(MAX_BLOB_SIZE);
 
-    // read blob header
-    let mut header = read_blob_header(r.by_ref(), &mut buf).unwrap();
-    println!("{:?}", header);
-
-    // read blob
-    let mut blob = read_blob(r.by_ref(), header.datasize as u64, &mut buf).unwrap();
-    //println!("{:?}", blob);
-
-    // decode the blob to correct
-    decode_blob(blob, header);
-
-    println!("----------------------------");
-
-    // read blob header
-    header = read_blob_header(r.by_ref(), &mut buf).unwrap();
-    println!("{:?}", header);
-
-    // read blob
-    blob = read_blob(r.by_ref(), header.datasize as u64, &mut buf).unwrap();
-    //println!("{:?}", blob);
-
-    // decode the blob to correct
-    decode_blob(blob, header);
-
-    println!("----------------------------");
-
-    // read blob header
-    header = read_blob_header(r.by_ref(), &mut buf).unwrap();
-    println!("{:?}", header);
-
-    // read blob
-    blob = read_blob(r.by_ref(), header.datasize as u64, &mut buf).unwrap();
-    //println!("{:?}", blob);
-
-    // decode the blob to correct
-    decode_blob(blob, header);
+    loop {
+        if let Err(e) = step_reader(r.by_ref(), &mut buf) {
+            println!("done!");
+            break;
+        }
+        println!("--------------------------------------");
+    }
 
     Ok(())
 }
