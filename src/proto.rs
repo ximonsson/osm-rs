@@ -9,6 +9,8 @@ pub mod items {
 use items::blob::Data;
 use items::*;
 
+use crate as osm;
+
 #[derive(Debug)]
 enum FileBlock {
     Header(HeaderBlock),
@@ -34,7 +36,7 @@ fn parse_str_tbl(pb: &PrimitiveBlock) -> Vec<String> {
     st
 }
 
-fn decode_primitive_block(m: &PrimitiveBlock) {
+fn decode_primitive_block(m: &PrimitiveBlock) -> Vec<osm::Element> {
     let st = parse_str_tbl(&m);
 
     for g in &m.primitivegroup {
@@ -70,15 +72,15 @@ fn decode_primitive_block(m: &PrimitiveBlock) {
                 }
             }
         } else if g.ways.len() > 0 {
-            println!("we got some ways! {} in total", g.ways.len());
         } else if g.relations.len() > 0 {
-            println!("we got some relations! {} in total", g.relations.len());
+            //println!("we got some relations! {} in total", g.relations.len());
         } else if g.nodes.len() > 0 {
-            println!("we got some nodes! {} in total", g.nodes.len());
+            //println!("we got some nodes! {} in total", g.nodes.len());
         } else if g.changesets.len() > 0 {
-            println!("we got some changesets! {} in total", g.changesets.len());
+            //println!("we got some changesets! {} in total", g.changesets.len());
         }
     }
+    Vec::<osm::Element>::new()
 }
 
 fn decode_blob(b: Blob, h: BlobHeader) -> FileBlock {
