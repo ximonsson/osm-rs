@@ -110,10 +110,9 @@ fn decode_blob(b: Blob, h: BlobHeader) -> FileBlock {
 
 fn read_blob_header(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<BlobHeader> {
     // read blob header size
-    if let n = read(r.by_ref(), BYTES_BLOB_HEADER_SIZE, &mut buf).unwrap() {
-        if n == 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, "lol"));
-        }
+    let n = read(r.by_ref(), BYTES_BLOB_HEADER_SIZE, &mut buf).unwrap();
+    if n == 0 {
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "lol"));
     }
     let bhs: u32 = u32::from_be_bytes(buf[..BYTES_BLOB_HEADER_SIZE as usize].try_into().unwrap());
 
