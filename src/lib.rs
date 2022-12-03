@@ -1,50 +1,72 @@
+use quick_xml::de::{from_reader, DeError};
+use serde::{Deserialize, Serialize};
 pub mod proto;
-pub mod xml;
 
-use std::collections::HashMap;
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Tag {
+    k: String,
+    v: String,
+}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Node {
     id: i64,
-    tags: HashMap<String, String>,
+    lat: f64,
+    lon: f64,
+    #[serde(rename = "tag", default)]
+    tags: Vec<Tag>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NodeRef {
+    r#ref: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Way {
     id: i64,
-    refs: Vec<i64>,
-    tags: HashMap<String, String>,
+    #[serde(rename = "nd")]
+    nodes: Vec<NodeRef>,
+    #[serde(rename = "tag", default)]
+    tags: Vec<Tag>,
 }
 
-impl Way {
-    fn from_proto(w: &proto::items::Way, st: &Vec<String>) -> Self {
-        //let tags: HashMap<u32, u32> = std::iter::zip(w.keys, w.vals).into();
-        //let tags = HashMap::from_iter(std::iter::zip(w.keys, w.vals));
-        let tags = HashMap::new();
-
-        Way {
-            id: w.id,
-            refs: w.refs.clone(),
-            tags: tags,
-        }
-    }
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Member {
+    r#ref: i64,
+    role: String,
+    r#type: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Relation {
     id: i64,
+    #[serde(rename = "tag", default)]
+    tags: Vec<Tag>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum Element {
+    Node(Node),
+    Way(Way),
+    Relation(Relation),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Data {
-    nodes: HashMap<i64, Node>,
-    ways: HashMap<i64, Way>,
-    relations: HashMap<i64, Relation>,
+    #[serde(rename = "node")]
+    nodes: Vec<Node>,
+    #[serde(rename = "way")]
+    ways: Vec<Way>,
+    #[serde(rename = "relation")]
+    relations: Vec<Relation>,
 }
 
 impl Data {
-    fn push_way(&mut self, w: Way) {
-        self.ways.insert(w.id, w);
+    // Parse OSM-XML file.
+    pub fn from_reader(r: impl std::io::BufRead) -> Result<Self, DeError> {
+        from_reader(r)
     }
 }
 

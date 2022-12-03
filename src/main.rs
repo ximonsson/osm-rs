@@ -7,8 +7,8 @@ fn foo(fp: &str) -> std::io::Result<()> {
 }
 
 fn read_xml(fp: &str) -> Result<(), quick_xml::de::DeError> {
-    let _d = osm::xml::Data::from_reader(std::io::BufReader::new(std::fs::File::open(fp).unwrap()))
-        .unwrap();
+    let _d =
+        osm::Data::from_reader(std::io::BufReader::new(std::fs::File::open(fp).unwrap())).unwrap();
     //println!("{:?}", _d);
     Ok(())
 }
