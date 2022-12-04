@@ -54,7 +54,7 @@ enum Element {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Data {
+pub struct File {
     #[serde(rename = "node")]
     nodes: Vec<Node>,
     #[serde(rename = "way")]
@@ -63,7 +63,7 @@ pub struct Data {
     relations: Vec<Relation>,
 }
 
-impl Data {
+impl File {
     // Parse OSM-XML file.
     pub fn from_reader(r: impl std::io::BufRead) -> Result<Self, DeError> {
         from_reader(r)
