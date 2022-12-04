@@ -9,7 +9,7 @@ pub mod items {
 use items::blob::Data;
 use items::*;
 
-use crate as osm;
+use crate::*;
 
 #[derive(Debug)]
 enum FileBlock {
@@ -36,42 +36,46 @@ fn parse_str_tbl(pb: &PrimitiveBlock) -> Vec<String> {
     st
 }
 
-fn decode_primitive_block(m: &PrimitiveBlock) -> Vec<osm::Element> {
-    let st = parse_str_tbl(&m);
+fn decode_primitive_block(pb: &PrimitiveBlock) -> Vec<Element> {
+    let st = parse_str_tbl(&pb);
+    let mut es: Vec<Element> = Vec::with_capacity(pb.primitivegroup.len() * 8000);
 
-    for g in &m.primitivegroup {
+    for g in &pb.primitivegroup {
         if let Some(dnodes) = &g.dense {
             let n = dnodes.id.len();
-            println!("we got some dense nodes! {} in total", n);
 
             let mut id: i64 = 0;
             let mut lat: i64 = 0;
             let mut lon: i64 = 0;
 
+            // tag index
             let mut ti: usize = 0;
-            let mut k: &str;
-            let mut v: &str;
 
             for i in 0..n {
                 id += dnodes.id[i];
                 lat += dnodes.lat[i];
                 lon += dnodes.lon[i];
 
-                //println!("  [{}] @ ({}, {})", id, lat, lon);
+                let tags = Tag::from_dense_nodes_kvs(&dnodes.keys_vals, &st, &mut ti);
 
-                while ti < dnodes.keys_vals.len() {
-                    if dnodes.keys_vals[ti] == 0 {
-                        ti += 1;
-                        break;
-                    }
-                    k = &st[dnodes.keys_vals[ti] as usize];
-                    ti += 1;
-                    v = &st[dnodes.keys_vals[ti] as usize];
-                    ti += 1;
-                    //println!("{} => {}", k, v);
-                }
+                es.push(Element::Node(crate::Node {
+                    id: id,
+                    lat: 0.000000001
+                        * (pb.lat_offset.unwrap_or(100) as i64
+                            + (pb.granularity.unwrap_or(0) as i64 * lat))
+                            as f64,
+                    lon: 0.000000001
+                        * (pb.lon_offset.unwrap_or(100) as i64
+                            + (pb.granularity.unwrap_or(0) as i64 * lon))
+                            as f64,
+                    tags: tags,
+                }));
             }
         } else if g.ways.len() > 0 {
+            g.ways
+                .iter()
+                .map(|w| crate::Way::from_proto(&w, &st))
+                .map(|w| es.push(Element::Way(w)));
         } else if g.relations.len() > 0 {
             //println!("we got some relations! {} in total", g.relations.len());
         } else if g.nodes.len() > 0 {
@@ -80,7 +84,8 @@ fn decode_primitive_block(m: &PrimitiveBlock) -> Vec<osm::Element> {
             //println!("we got some changesets! {} in total", g.changesets.len());
         }
     }
-    Vec::<osm::Element>::new()
+
+    es
 }
 
 fn decode_blob(b: Blob, h: BlobHeader) -> FileBlock {
