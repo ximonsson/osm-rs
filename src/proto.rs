@@ -1,15 +1,20 @@
-use flate2::{Decompress, FlushDecompress};
-use prost::Message;
-use std::io::{Read, Result};
-
 pub mod items {
     include!(concat!(env!("OUT_DIR"), "/osmpbf.rs"));
 }
 
+use crate::*;
+use flate2::{Decompress, FlushDecompress};
 use items::blob::Data;
 use items::*;
+use prost::Message;
+use std::io::{Read, Result};
 
-use crate::*;
+#[macro_export]
+macro_rules! coord {
+    ($x: expr, $offset: expr, $granularity: expr) => {
+        0.000000001 * ($offset.unwrap_or(0) as i64 + $granularity.unwrap_or(100) as i64 * $x) as f64
+    };
+}
 
 #[derive(Debug)]
 enum FileBlock {
@@ -19,11 +24,6 @@ enum FileBlock {
 
 const BYTES_BLOB_HEADER_SIZE: u64 = 4;
 const MAX_BLOB_SIZE: usize = 2 ^ 25; // 32MB
-
-fn read(r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<usize> {
-    buf.clear();
-    r.take(n).read_to_end(&mut buf)
-}
 
 fn parse_str_tbl(pb: &PrimitiveBlock) -> Vec<String> {
     let mut st = Vec::<String>::with_capacity(pb.stringtable.s.len());
@@ -41,47 +41,27 @@ fn decode_primitive_block(pb: &PrimitiveBlock) -> Vec<Element> {
     let mut es: Vec<Element> = Vec::with_capacity(pb.primitivegroup.len() * 8000);
 
     for g in &pb.primitivegroup {
-        if let Some(dnodes) = &g.dense {
-            let n = dnodes.id.len();
-
-            let mut id: i64 = 0;
-            let mut lat: i64 = 0;
-            let mut lon: i64 = 0;
-
-            // tag index
-            let mut ti: usize = 0;
-
-            for i in 0..n {
-                id += dnodes.id[i];
-                lat += dnodes.lat[i];
-                lon += dnodes.lon[i];
-
-                let tags = Tag::from_dense_nodes_kvs(&dnodes.keys_vals, &st, &mut ti);
-
-                es.push(Element::Node(crate::Node {
-                    id: id,
-                    lat: 0.000000001
-                        * (pb.lat_offset.unwrap_or(100) as i64
-                            + (pb.granularity.unwrap_or(0) as i64 * lat))
-                            as f64,
-                    lon: 0.000000001
-                        * (pb.lon_offset.unwrap_or(100) as i64
-                            + (pb.granularity.unwrap_or(0) as i64 * lon))
-                            as f64,
-                    tags: tags,
-                }));
-            }
+        if let Some(dense) = &g.dense {
+            crate::Node::from_proto_dense_nodes(&dense, &st, &pb).for_each(|n| {
+                es.push(Element::Node(n));
+            })
         } else if g.ways.len() > 0 {
             g.ways
                 .iter()
                 .map(|w| crate::Way::from_proto(&w, &st))
-                .map(|w| es.push(Element::Way(w)));
+                .for_each(|w| es.push(Element::Way(w)));
         } else if g.relations.len() > 0 {
-            //println!("we got some relations! {} in total", g.relations.len());
+            g.relations
+                .iter()
+                .map(|r| crate::Relation::from_proto(&r, &st))
+                .for_each(|r| es.push(Element::Relation(r)));
         } else if g.nodes.len() > 0 {
-            //println!("we got some nodes! {} in total", g.nodes.len());
+            g.nodes
+                .iter()
+                .map(|n| crate::Node::from_proto(&n, &st, &pb))
+                .for_each(|n| es.push(Element::Node(n)));
         } else if g.changesets.len() > 0 {
-            //println!("we got some changesets! {} in total", g.changesets.len());
+            // we ignore these
         }
     }
 
@@ -113,6 +93,11 @@ fn decode_blob(b: Blob, h: BlobHeader) -> FileBlock {
     };
 
     msg
+}
+
+fn read(r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<usize> {
+    buf.clear();
+    r.take(n).read_to_end(&mut buf)
 }
 
 fn read_blob_header(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<BlobHeader> {
@@ -149,13 +134,9 @@ fn step_reader(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<()> {
     // decode the blob to correct
     let block = decode_blob(blob, header);
 
-    match block {
-        FileBlock::Header(_) => println!("HeaderBlock"),
-        FileBlock::Primitive(b) => {
-            println!("PrimitiveBlock");
-            decode_primitive_block(&b);
-        }
-    };
+    if let FileBlock::Primitive(b) = block {
+        decode_primitive_block(&b);
+    }
 
     Ok(())
 }
@@ -169,7 +150,6 @@ pub fn from_reader(mut r: impl Read) -> Result<()> {
             println!("done!");
             break;
         }
-        println!("--------------------------------------");
     }
 
     Ok(())
