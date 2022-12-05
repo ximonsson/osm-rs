@@ -141,7 +141,7 @@ fn read_blob(mut r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<Blob> {
 
 /// Step reader over one `BlobHeader`, `FileBlock` couple and return the underlying elements in the
 /// `PrimitiveBlock`. In case the `FileBlock` is of `Header` type, no data is returned.
-fn step_reader(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<()> {
+fn step_reader(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<Option<Vec<Element>>> {
     // read blob header
     let header = match read_blob_header(r.by_ref(), &mut buf) {
         Ok(h) => h,
@@ -156,10 +156,10 @@ fn step_reader(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<()> {
     let block = decode_blob(blob, header);
 
     if let FileBlock::Primitive(b) = block {
-        decode_primitive_block(&b);
+        return Ok(Some(decode_primitive_block(&b)));
     }
 
-    Ok(())
+    Ok(None)
 }
 
 pub fn from_reader(mut r: impl Read) -> Result<()> {
