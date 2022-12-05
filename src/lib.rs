@@ -9,7 +9,7 @@ pub struct Tag {
 }
 
 impl Tag {
-    pub fn from_dense_nodes_kvs(kvs: &Vec<i32>, st: &Vec<String>, j: &mut usize) -> Vec<Self> {
+    fn from_dense_nodes_kvs(kvs: &Vec<i32>, st: &Vec<String>, j: &mut usize) -> Vec<Self> {
         let mut i: usize = *j;
         let mut k: &str;
         let mut v: &str;
@@ -34,7 +34,7 @@ impl Tag {
         tags
     }
 
-    pub fn from_kvs(k: &Vec<u32>, v: &Vec<u32>, st: &Vec<String>) -> Vec<Self> {
+    fn from_kvs(k: &Vec<u32>, v: &Vec<u32>, st: &Vec<String>) -> Vec<Self> {
         std::iter::zip(k, v)
             .map(|(k, v)| Tag {
                 k: (&st[*k as usize]).into(),
@@ -54,7 +54,7 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn from_proto_dense_nodes<'a>(
+    fn from_proto_dense_nodes<'a>(
         dense: &'a proto::items::DenseNodes,
         st: &'a Vec<String>,
         pb: &'a proto::items::PrimitiveBlock,
@@ -82,7 +82,7 @@ impl Node {
         )
     }
 
-    pub fn from_proto(
+    fn from_proto(
         n: &proto::items::Node,
         st: &Vec<String>,
         pb: &proto::items::PrimitiveBlock,
@@ -111,7 +111,7 @@ pub struct Way {
 }
 
 impl Way {
-    pub fn from_proto(w: &proto::items::Way, st: &Vec<String>) -> Self {
+    fn from_proto(w: &proto::items::Way, st: &Vec<String>) -> Self {
         let mut i: i64 = 0;
         let ns = w
             .refs
@@ -137,12 +137,8 @@ pub struct Member {
     r#type: String,
 }
 
-fn foo<T>(_: &T) {
-    println!("{}", std::any::type_name::<T>());
-}
-
 impl Member {
-    pub fn from_proto(
+    fn from_proto(
         ids: &Vec<i64>,
         roles: &Vec<i32>,
         types: &Vec<i32>,
@@ -175,7 +171,7 @@ pub struct Relation {
 }
 
 impl Relation {
-    pub fn from_proto(r: &proto::items::Relation, st: &Vec<String>) -> Self {
+    fn from_proto(r: &proto::items::Relation, st: &Vec<String>) -> Self {
         Relation {
             id: r.id,
             tags: Tag::from_kvs(&r.keys, &r.vals, st),
