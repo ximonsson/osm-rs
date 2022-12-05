@@ -25,17 +25,24 @@ enum FileBlock {
 const BYTES_BLOB_HEADER_SIZE: u64 = 4;
 const MAX_BLOB_SIZE: usize = 2 ^ 25; // 32MB
 
+/// Parse string table from `PrimitiveBlock`.
 fn parse_str_tbl(pb: &PrimitiveBlock) -> Vec<String> {
     let mut st = Vec::<String>::with_capacity(pb.stringtable.s.len());
-
     for b in &pb.stringtable.s {
         let s = std::str::from_utf8(&b).unwrap();
         st.push(s.to_string());
     }
-
     st
 }
 
+/// Decode a `PrimiteBlock` and return the combined elements in each group.
+///
+/// Different groups within the same `PrimitiveBlock` can encode different element types. This
+/// function will combine all elements into the same vector so there is a chance of recieving mixed
+/// types.
+///
+/// TODO maybe this function should instead return an iterator? that way the caller can
+/// over each element handle the different types then.
 fn decode_primitive_block(pb: &PrimitiveBlock) -> Vec<Element> {
     let st = parse_str_tbl(&pb);
     let mut es: Vec<Element> = Vec::with_capacity(pb.primitivegroup.len() * 8000);
@@ -68,6 +75,13 @@ fn decode_primitive_block(pb: &PrimitiveBlock) -> Vec<Element> {
     es
 }
 
+/// Decode Blob data to get a FileBlock.
+///
+/// Depending on the compression the function will decode the underlying data of the `Blob` and return
+/// a `FileBlock` item with the data..
+///
+/// TODO this function should be good candidate to use in the recieving end of a multi-threaded
+/// work pool.
 fn decode_blob(b: Blob, h: BlobHeader) -> FileBlock {
     let n: usize = match b.raw_size {
         Some(x) => x as usize,
@@ -95,11 +109,15 @@ fn decode_blob(b: Blob, h: BlobHeader) -> FileBlock {
     msg
 }
 
+/// Read some data from a source.
+///
+/// This is just a convenience function because we read in several places.
 fn read(r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<usize> {
     buf.clear();
     r.take(n).read_to_end(&mut buf)
 }
 
+/// Read the next `BlobHeader` from source.
 fn read_blob_header(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<BlobHeader> {
     // read blob header size
     let n = read(r.by_ref(), BYTES_BLOB_HEADER_SIZE, &mut buf).unwrap();
@@ -114,12 +132,15 @@ fn read_blob_header(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<BlobHeade
     Ok(bh)
 }
 
+/// Read next `Blob` from source.
 fn read_blob(mut r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<Blob> {
     read(r.by_ref(), n, &mut buf).unwrap();
     let blob = Blob::decode(buf.as_ref()).unwrap();
     Ok(blob)
 }
 
+/// Step reader over one `BlobHeader`, `FileBlock` couple and return the underlying elements in the
+/// `PrimitiveBlock`. In case the `FileBlock` is of `Header` type, no data is returned.
 fn step_reader(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<()> {
     // read blob header
     let header = match read_blob_header(r.by_ref(), &mut buf) {
