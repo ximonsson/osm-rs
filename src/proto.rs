@@ -8,6 +8,7 @@ use items::blob::Data;
 use items::*;
 use prost::Message;
 use std::io::{Read, Result};
+//use std::iter::Iterator;
 
 #[macro_export]
 macro_rules! coord {
@@ -139,7 +140,7 @@ fn read_blob(mut r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<Blob> {
     Ok(blob)
 }
 
-/// Step reader over one `BlobHeader`, `FileBlock` couple and return the underlying elements in the
+/// Step reader over one (`BlobHeader`, `FileBlock`) couple and return the underlying elements in the
 /// `PrimitiveBlock`. In case the `FileBlock` is of `Header` type, no data is returned.
 fn step_reader(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<Option<Vec<Element>>> {
     // read blob header
@@ -150,11 +151,12 @@ fn step_reader(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<Option<Vec<Ele
     println!("{:?}", header);
 
     // read blob
-    let blob = read_blob(r.by_ref(), header.datasize as u64, &mut buf).unwrap();
+    let blob: Blob = read_blob(r.by_ref(), header.datasize as u64, &mut buf).unwrap();
 
-    // decode the blob to correct
-    let block = decode_blob(blob, header);
+    // decode the blob to file block
+    let block: FileBlock = decode_blob(blob, header);
 
+    // decode primitive
     if let FileBlock::Primitive(b) = block {
         return Ok(Some(decode_primitive_block(&b)));
     }
