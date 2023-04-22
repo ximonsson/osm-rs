@@ -1,15 +1,20 @@
-use flate2::{Decompress, FlushDecompress};
-use prost::Message;
-use std::io::{Read, Result};
-
 pub mod items {
     include!(concat!(env!("OUT_DIR"), "/osmpbf.rs"));
 }
 
+use crate::*;
+use flate2::{Decompress, FlushDecompress};
 use items::blob::Data;
 use items::*;
+use prost::Message;
+use std::io::{Read, Result};
 
-use crate::*;
+#[macro_export]
+macro_rules! coord {
+    ($x: expr, $offset: expr, $granularity: expr) => {
+        0.000000001 * ($offset.unwrap_or(0) as i64 + $granularity.unwrap_or(100) as i64 * $x) as f64
+    };
+}
 
 #[derive(Debug)]
 enum FileBlock {
@@ -20,74 +25,63 @@ enum FileBlock {
 const BYTES_BLOB_HEADER_SIZE: u64 = 4;
 const MAX_BLOB_SIZE: usize = 2 ^ 25; // 32MB
 
-fn read(r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<usize> {
-    buf.clear();
-    r.take(n).read_to_end(&mut buf)
-}
-
+/// Parse string table from `PrimitiveBlock`.
 fn parse_str_tbl(pb: &PrimitiveBlock) -> Vec<String> {
     let mut st = Vec::<String>::with_capacity(pb.stringtable.s.len());
-
     for b in &pb.stringtable.s {
         let s = std::str::from_utf8(&b).unwrap();
         st.push(s.to_string());
     }
-
     st
 }
 
+/// Decode a `PrimiteBlock` and return the combined elements in each group.
+///
+/// Different groups within the same `PrimitiveBlock` can encode different element types. This
+/// function will combine all elements into the same vector so there is a chance of recieving mixed
+/// types.
+///
+/// TODO maybe this function should instead return an iterator? that way the caller can
+/// over each element handle the different types then.
 fn decode_primitive_block(pb: &PrimitiveBlock) -> Vec<Element> {
     let st = parse_str_tbl(&pb);
     let mut es: Vec<Element> = Vec::with_capacity(pb.primitivegroup.len() * 8000);
 
     for g in &pb.primitivegroup {
-        if let Some(dnodes) = &g.dense {
-            let n = dnodes.id.len();
-
-            let mut id: i64 = 0;
-            let mut lat: i64 = 0;
-            let mut lon: i64 = 0;
-
-            // tag index
-            let mut ti: usize = 0;
-
-            for i in 0..n {
-                id += dnodes.id[i];
-                lat += dnodes.lat[i];
-                lon += dnodes.lon[i];
-
-                let tags = Tag::from_dense_nodes_kvs(&dnodes.keys_vals, &st, &mut ti);
-
-                es.push(Element::Node(crate::Node {
-                    id: id,
-                    lat: 0.000000001
-                        * (pb.lat_offset.unwrap_or(100) as i64
-                            + (pb.granularity.unwrap_or(0) as i64 * lat))
-                            as f64,
-                    lon: 0.000000001
-                        * (pb.lon_offset.unwrap_or(100) as i64
-                            + (pb.granularity.unwrap_or(0) as i64 * lon))
-                            as f64,
-                    tags: tags,
-                }));
-            }
+        if let Some(dense) = &g.dense {
+            crate::Node::from_proto_dense_nodes(&dense, &st, &pb).for_each(|n| {
+                es.push(Element::Node(n));
+            })
         } else if g.ways.len() > 0 {
             g.ways
                 .iter()
                 .map(|w| crate::Way::from_proto(&w, &st))
-                .map(|w| es.push(Element::Way(w)));
+                .for_each(|w| es.push(Element::Way(w)));
         } else if g.relations.len() > 0 {
-            //println!("we got some relations! {} in total", g.relations.len());
+            g.relations
+                .iter()
+                .map(|r| crate::Relation::from_proto(&r, &st))
+                .for_each(|r| es.push(Element::Relation(r)));
         } else if g.nodes.len() > 0 {
-            //println!("we got some nodes! {} in total", g.nodes.len());
+            g.nodes
+                .iter()
+                .map(|n| crate::Node::from_proto(&n, &st, &pb))
+                .for_each(|n| es.push(Element::Node(n)));
         } else if g.changesets.len() > 0 {
-            //println!("we got some changesets! {} in total", g.changesets.len());
+            // we ignore these
         }
     }
 
     es
 }
 
+/// Decode Blob data to get a FileBlock.
+///
+/// Depending on the compression the function will decode the underlying data of the `Blob` and return
+/// a `FileBlock` item with the data..
+///
+/// TODO this function should be good candidate to use in the recieving end of a multi-threaded
+/// work pool.
 fn decode_blob(b: Blob, h: BlobHeader) -> FileBlock {
     let n: usize = match b.raw_size {
         Some(x) => x as usize,
@@ -115,6 +109,15 @@ fn decode_blob(b: Blob, h: BlobHeader) -> FileBlock {
     msg
 }
 
+/// Read some data from a source.
+///
+/// This is just a convenience function because we read in several places.
+fn read(r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<usize> {
+    buf.clear();
+    r.take(n).read_to_end(&mut buf)
+}
+
+/// Read the next `BlobHeader` from source.
 fn read_blob_header(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<BlobHeader> {
     // read blob header size
     let n = read(r.by_ref(), BYTES_BLOB_HEADER_SIZE, &mut buf).unwrap();
@@ -129,13 +132,16 @@ fn read_blob_header(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<BlobHeade
     Ok(bh)
 }
 
+/// Read next `Blob` from source.
 fn read_blob(mut r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<Blob> {
     read(r.by_ref(), n, &mut buf).unwrap();
     let blob = Blob::decode(buf.as_ref()).unwrap();
     Ok(blob)
 }
 
-fn step_reader(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<()> {
+/// Step reader over one `BlobHeader`, `FileBlock` couple and return the underlying elements in the
+/// `PrimitiveBlock`. In case the `FileBlock` is of `Header` type, no data is returned.
+fn step_reader(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<Option<Vec<Element>>> {
     // read blob header
     let header = match read_blob_header(r.by_ref(), &mut buf) {
         Ok(h) => h,
@@ -149,15 +155,11 @@ fn step_reader(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<()> {
     // decode the blob to correct
     let block = decode_blob(blob, header);
 
-    match block {
-        FileBlock::Header(_) => println!("HeaderBlock"),
-        FileBlock::Primitive(b) => {
-            println!("PrimitiveBlock");
-            decode_primitive_block(&b);
-        }
-    };
+    if let FileBlock::Primitive(b) = block {
+        return Ok(Some(decode_primitive_block(&b)));
+    }
 
-    Ok(())
+    Ok(None)
 }
 
 pub fn from_reader(mut r: impl Read) -> Result<()> {
@@ -169,7 +171,6 @@ pub fn from_reader(mut r: impl Read) -> Result<()> {
             println!("done!");
             break;
         }
-        println!("--------------------------------------");
     }
 
     Ok(())

@@ -9,7 +9,7 @@ pub struct Tag {
 }
 
 impl Tag {
-    pub fn from_dense_nodes_kvs(kvs: &Vec<i32>, st: &Vec<String>, j: &mut usize) -> Vec<Self> {
+    fn from_dense_nodes_kvs(kvs: &Vec<i32>, st: &Vec<String>, j: &mut usize) -> Vec<Self> {
         let mut i: usize = *j;
         let mut k: &str;
         let mut v: &str;
@@ -34,7 +34,7 @@ impl Tag {
         tags
     }
 
-    pub fn from_kvs(k: &Vec<u32>, v: &Vec<u32>, st: &Vec<String>) -> Vec<Self> {
+    fn from_kvs(k: &Vec<u32>, v: &Vec<u32>, st: &Vec<String>) -> Vec<Self> {
         std::iter::zip(k, v)
             .map(|(k, v)| Tag {
                 k: (&st[*k as usize]).into(),
@@ -54,8 +54,45 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn from_proto_dense_nodes() -> Vec<Self> {
-        vec![]
+    fn from_proto_dense_nodes<'a>(
+        dense: &'a proto::items::DenseNodes,
+        st: &'a Vec<String>,
+        pb: &'a proto::items::PrimitiveBlock,
+    ) -> impl std::iter::Iterator<Item = Self> + 'a {
+        let mut id: i64 = 0;
+        let mut lat: i64 = 0;
+        let mut lon: i64 = 0;
+
+        // tag index
+        let mut ti: usize = 0;
+
+        std::iter::zip(&dense.id, std::iter::zip(&dense.lat, &dense.lon)).map(
+            move |(i, (phi, lam))| {
+                id += i;
+                lat += phi;
+                lon += lam;
+
+                Node {
+                    id: id,
+                    lat: coord!(lat, pb.lat_offset, pb.granularity),
+                    lon: coord!(lon, pb.lon_offset, pb.granularity),
+                    tags: Tag::from_dense_nodes_kvs(&dense.keys_vals, &st, &mut ti),
+                }
+            },
+        )
+    }
+
+    fn from_proto(
+        n: &proto::items::Node,
+        st: &Vec<String>,
+        pb: &proto::items::PrimitiveBlock,
+    ) -> Self {
+        Node {
+            id: n.id,
+            tags: Tag::from_kvs(&n.keys, &n.vals, st),
+            lat: coord!(n.lat, pb.lat_offset, pb.granularity),
+            lon: coord!(n.lon, pb.lon_offset, pb.granularity),
+        }
     }
 }
 
@@ -74,7 +111,7 @@ pub struct Way {
 }
 
 impl Way {
-    pub fn from_proto(w: &proto::items::Way, st: &Vec<String>) -> Self {
+    fn from_proto(w: &proto::items::Way, st: &Vec<String>) -> Self {
         let mut i: i64 = 0;
         let ns = w
             .refs
@@ -100,11 +137,47 @@ pub struct Member {
     r#type: String,
 }
 
+impl Member {
+    fn from_proto(
+        ids: &Vec<i64>,
+        roles: &Vec<i32>,
+        types: &Vec<i32>,
+        st: &Vec<String>,
+    ) -> Vec<Self> {
+        let mut i: i64 = 0;
+        std::iter::zip(std::iter::zip(ids, roles), types)
+            .map(|((id, rl), t)| {
+                i += id;
+                Member {
+                    r#ref: i,
+                    role: (&st[*rl as usize]).into(),
+                    r#type: proto::items::relation::MemberType::from_i32(*t)
+                        .unwrap()
+                        .as_str_name()
+                        .into(),
+                }
+            })
+            .collect()
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Relation {
     id: i64,
     #[serde(rename = "tag", default)]
     tags: Vec<Tag>,
+    #[serde(rename = "member", default)]
+    members: Vec<Member>,
+}
+
+impl Relation {
+    fn from_proto(r: &proto::items::Relation, st: &Vec<String>) -> Self {
+        Relation {
+            id: r.id,
+            tags: Tag::from_kvs(&r.keys, &r.vals, st),
+            members: Member::from_proto(&r.memids, &r.roles_sid, &r.types, st),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
