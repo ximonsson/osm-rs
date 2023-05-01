@@ -164,7 +164,7 @@ fn step_reader(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<Option<Vec<Ele
     Ok(None)
 }
 
-pub fn from_reader(mut r: impl Read) -> Result<()> {
+pub fn from_reader(mut r: impl Read) -> Result<File> {
     // create buffer
     let mut buf: Vec<u8> = Vec::with_capacity(MAX_BLOB_SIZE);
 
@@ -175,5 +175,9 @@ pub fn from_reader(mut r: impl Read) -> Result<()> {
         }
     }
 
-    Ok(())
+    Ok(File {
+        nodes: vec![],
+        ways: vec![],
+        relations: vec![],
+    })
 }

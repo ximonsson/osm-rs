@@ -3,7 +3,10 @@ use quick_xml;
 
 fn foo(fp: &str) -> std::io::Result<()> {
     let f = std::fs::File::open(fp).unwrap();
-    proto::from_reader(f)
+    match proto::from_reader(f) {
+        Err(e) => Err(e),
+        Ok(_) => Ok(()),
+    }
 }
 
 fn read_xml(fp: &str) -> Result<(), quick_xml::de::DeError> {
