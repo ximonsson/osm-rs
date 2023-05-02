@@ -41,9 +41,6 @@ fn parse_str_tbl(pb: &PrimitiveBlock) -> Vec<String> {
 /// Different groups within the same `PrimitiveBlock` can encode different element types. This
 /// function will combine all elements into the same vector so there is a chance of recieving mixed
 /// types.
-///
-/// TODO maybe this function should instead return an iterator? that way the caller can
-/// over each element handle the different types then.
 fn decode_primitive_block(pb: &PrimitiveBlock) -> Vec<Element> {
     let st = parse_str_tbl(&pb);
     let mut es: Vec<Element> = Vec::with_capacity(pb.primitivegroup.len() * 8000);
@@ -80,9 +77,6 @@ fn decode_primitive_block(pb: &PrimitiveBlock) -> Vec<Element> {
 ///
 /// Depending on the compression the function will decode the underlying data of the `Blob` and return
 /// a `FileBlock` item with the data..
-///
-/// TODO this function should be good candidate to use in the recieving end of a multi-threaded
-/// work pool.
 fn decode_blob(b: Blob, h: BlobHeader) -> FileBlock {
     let n: usize = match b.raw_size {
         Some(x) => x as usize,
@@ -110,68 +104,81 @@ fn decode_blob(b: Blob, h: BlobHeader) -> FileBlock {
     msg
 }
 
-/// Read some data from a source.
-///
-/// This is just a convenience function because we read in several places.
-fn read(r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<usize> {
-    buf.clear();
-    r.take(n).read_to_end(&mut buf)
+struct FileBlockIterator {
+    r: Box<dyn Read>,
+    buf: Vec<u8>,
 }
 
-/// Read the next `BlobHeader` from source.
-fn read_blob_header(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<BlobHeader> {
-    // read blob header size
-    let n = read(r.by_ref(), BYTES_BLOB_HEADER_SIZE, &mut buf).unwrap();
-    if n == 0 {
-        return Err(std::io::Error::new(std::io::ErrorKind::Other, "lol"));
-    }
-    let bhs: u32 = u32::from_be_bytes(buf[..BYTES_BLOB_HEADER_SIZE as usize].try_into().unwrap());
-
-    // decode blob header
-    read(r.by_ref(), bhs as u64, &mut buf).unwrap();
-    let bh = BlobHeader::decode(buf.as_ref()).unwrap();
-    Ok(bh)
-}
-
-/// Read next `Blob` from source.
-fn read_blob(mut r: impl Read, n: u64, mut buf: &mut Vec<u8>) -> Result<Blob> {
-    read(r.by_ref(), n, &mut buf).unwrap();
-    let blob = Blob::decode(buf.as_ref()).unwrap();
-    Ok(blob)
-}
-
-/// Step reader over one (`BlobHeader`, `FileBlock`) couple and return the underlying elements in the
-/// `PrimitiveBlock`. In case the `FileBlock` is of `Header` type, no data is returned.
-fn step_reader(mut r: impl Read, mut buf: &mut Vec<u8>) -> Result<Option<Vec<Element>>> {
-    // read blob header
-    let header = match read_blob_header(r.by_ref(), &mut buf) {
-        Ok(h) => h,
-        Err(e) => return Err(e),
-    };
-    println!("{:?}", header);
-
-    // read blob
-    let blob: Blob = read_blob(r.by_ref(), header.datasize as u64, &mut buf).unwrap();
-
-    // decode the blob to file block
-    let block: FileBlock = decode_blob(blob, header);
-
-    // decode primitive
-    if let FileBlock::Primitive(b) = block {
-        return Ok(Some(decode_primitive_block(&b)));
+impl FileBlockIterator {
+    /// Read some data from a source.
+    ///
+    /// This is just a convenience function because we read in several places.
+    fn read(&mut self, n: u64) -> Result<usize> {
+        self.buf.clear();
+        self.r.by_ref().take(n).read_to_end(&mut self.buf)
     }
 
-    Ok(None)
+    /// Read the next `BlobHeader` from source.
+    fn read_blob_header(&mut self) -> Result<BlobHeader> {
+        // read blob header size
+        let n = self.read(BYTES_BLOB_HEADER_SIZE).unwrap();
+        if n == 0 {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "lol"));
+        }
+        let bhs: u32 = u32::from_be_bytes(
+            self.buf[..BYTES_BLOB_HEADER_SIZE as usize]
+                .try_into()
+                .unwrap(),
+        );
+
+        // decode blob header
+        self.read(bhs as u64).unwrap();
+        let bh = BlobHeader::decode(self.buf.as_ref()).unwrap();
+        Ok(bh)
+    }
+
+    /// Read next `Blob` from source.
+    fn read_blob(&mut self, n: u64) -> Result<Blob> {
+        self.read(n).unwrap();
+        let blob = Blob::decode(self.buf.as_ref()).unwrap();
+        Ok(blob)
+    }
+
+    fn from_reader(r: impl Read + 'static) -> FileBlockIterator {
+        // create buffer
+        let buf: Vec<u8> = Vec::with_capacity(MAX_BLOB_SIZE);
+        FileBlockIterator {
+            r: Box::new(r),
+            buf: buf,
+        }
+    }
 }
 
-pub fn from_reader(mut r: impl Read) -> Result<File> {
-    // create buffer
-    let mut buf: Vec<u8> = Vec::with_capacity(MAX_BLOB_SIZE);
+impl Iterator for FileBlockIterator {
+    type Item = FileBlock;
 
-    loop {
-        if let Err(_) = step_reader(r.by_ref(), &mut buf) {
-            println!("done!");
-            break;
+    fn next(&mut self) -> Option<Self::Item> {
+        // read blob header
+        let header = match self.read_blob_header() {
+            Ok(h) => h,
+            Err(_) => return None,
+        };
+        println!("{:?}", header);
+
+        // read blob
+        let blob: Blob = self.read_blob(header.datasize as u64).unwrap();
+
+        // decode the blob to file block
+        Some(decode_blob(blob, header))
+    }
+}
+
+pub fn from_reader(r: impl Read + 'static) -> Result<File> {
+    let blocks = FileBlockIterator::from_reader(r);
+
+    for block in blocks {
+        if let FileBlock::Primitive(b) = block {
+            decode_primitive_block(&b);
         }
     }
 
