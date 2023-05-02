@@ -2,13 +2,11 @@ pub mod items {
     include!(concat!(env!("OUT_DIR"), "/osmpbf.rs"));
 }
 
-use crate::*;
 use flate2::{Decompress, FlushDecompress};
 use items::blob::Data;
 use items::*;
 use prost::Message;
 use std::io::{Read, Result};
-//use std::iter::Iterator;
 
 #[macro_export]
 macro_rules! coord {
@@ -18,7 +16,7 @@ macro_rules! coord {
 }
 
 #[derive(Debug)]
-enum FileBlock {
+pub enum FileBlock {
     Header(HeaderBlock),
     Primitive(PrimitiveBlock),
 }
@@ -27,50 +25,13 @@ const BYTES_BLOB_HEADER_SIZE: u64 = 4;
 const MAX_BLOB_SIZE: usize = 2 ^ 25; // 32MB
 
 /// Parse string table from `PrimitiveBlock`.
-fn parse_str_tbl(pb: &PrimitiveBlock) -> Vec<String> {
+pub fn parse_str_tbl(pb: &PrimitiveBlock) -> Vec<String> {
     let mut st = Vec::<String>::with_capacity(pb.stringtable.s.len());
     for b in &pb.stringtable.s {
         let s = std::str::from_utf8(&b).unwrap();
         st.push(s.to_string());
     }
     st
-}
-
-/// Decode a `PrimiteBlock` and return the combined elements in each group.
-///
-/// Different groups within the same `PrimitiveBlock` can encode different element types. This
-/// function will combine all elements into the same vector so there is a chance of recieving mixed
-/// types.
-fn decode_primitive_block(pb: &PrimitiveBlock) -> Vec<Element> {
-    let st = parse_str_tbl(&pb);
-    let mut es: Vec<Element> = Vec::with_capacity(pb.primitivegroup.len() * 8000);
-
-    for g in &pb.primitivegroup {
-        if let Some(dense) = &g.dense {
-            crate::Node::from_proto_dense_nodes(&dense, &st, &pb).for_each(|n| {
-                es.push(Element::Node(n));
-            })
-        } else if g.ways.len() > 0 {
-            g.ways
-                .iter()
-                .map(|w| crate::Way::from_proto(&w, &st))
-                .for_each(|w| es.push(Element::Way(w)));
-        } else if g.relations.len() > 0 {
-            g.relations
-                .iter()
-                .map(|r| crate::Relation::from_proto(&r, &st))
-                .for_each(|r| es.push(Element::Relation(r)));
-        } else if g.nodes.len() > 0 {
-            g.nodes
-                .iter()
-                .map(|n| crate::Node::from_proto(&n, &st, &pb))
-                .for_each(|n| es.push(Element::Node(n)));
-        } else if g.changesets.len() > 0 {
-            // we ignore these
-        }
-    }
-
-    es
 }
 
 /// Decode Blob data to get a FileBlock.
@@ -104,7 +65,7 @@ fn decode_blob(b: Blob, h: BlobHeader) -> FileBlock {
     msg
 }
 
-struct FileBlockIterator {
+pub struct FileBlockIterator {
     r: Box<dyn Read>,
     buf: Vec<u8>,
 }
@@ -144,7 +105,7 @@ impl FileBlockIterator {
         Ok(blob)
     }
 
-    fn from_reader(r: impl Read + 'static) -> FileBlockIterator {
+    pub fn from_reader(r: impl Read + 'static) -> FileBlockIterator {
         // create buffer
         let buf: Vec<u8> = Vec::with_capacity(MAX_BLOB_SIZE);
         FileBlockIterator {
@@ -161,9 +122,12 @@ impl Iterator for FileBlockIterator {
         // read blob header
         let header = match self.read_blob_header() {
             Ok(h) => h,
+
+            // TODO
+            // Should check better which type of error this is, just assuming
+            // it is EOF here.
             Err(_) => return None,
         };
-        println!("{:?}", header);
 
         // read blob
         let blob: Blob = self.read_blob(header.datasize as u64).unwrap();
@@ -171,20 +135,4 @@ impl Iterator for FileBlockIterator {
         // decode the blob to file block
         Some(decode_blob(blob, header))
     }
-}
-
-pub fn from_reader(r: impl Read + 'static) -> Result<File> {
-    let blocks = FileBlockIterator::from_reader(r);
-
-    for block in blocks {
-        if let FileBlock::Primitive(b) = block {
-            decode_primitive_block(&b);
-        }
-    }
-
-    Ok(File {
-        nodes: vec![],
-        ways: vec![],
-        relations: vec![],
-    })
 }

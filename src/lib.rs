@@ -199,9 +199,58 @@ pub struct File {
 }
 
 impl File {
-    // Parse OSM-XML file.
+    /// Parse OSM-XML source.
     pub fn from_reader(r: impl std::io::BufRead) -> Result<Self, DeError> {
         from_reader(r)
+    }
+
+    /// Parse protobuf source.
+    pub fn from_proto_reader(r: impl std::io::Read + 'static) -> std::io::Result<Self> {
+        // allocate for data
+        let mut nodes: Vec<Node> = Vec::with_capacity(10000000);
+        let mut ways: Vec<Way> = Vec::with_capacity(10000000);
+        let mut relations: Vec<Relation> = Vec::with_capacity(1000);
+
+        // iterate over all file blocks in the reader
+        let blocks = proto::FileBlockIterator::from_reader(r);
+        for block in blocks {
+            // if file block it means we got data
+            if let proto::FileBlock::Primitive(b) = block {
+                let st = proto::parse_str_tbl(&b);
+
+                b.primitivegroup.iter().for_each(|g| {
+                    if let Some(dense) = &g.dense {
+                        nodes.append(&mut Node::from_proto_dense_nodes(&dense, &st, &b).collect());
+                    } else if g.ways.len() > 0 {
+                        ways.append(&mut g.ways.iter().map(|w| Way::from_proto(&w, &st)).collect());
+                    } else if g.relations.len() > 0 {
+                        relations.append(
+                            &mut g
+                                .relations
+                                .iter()
+                                .map(|r| Relation::from_proto(&r, &st))
+                                .collect(),
+                        );
+                    } else if g.nodes.len() > 0 {
+                        nodes.append(
+                            &mut g
+                                .nodes
+                                .iter()
+                                .map(|n| Node::from_proto(&n, &st, &b))
+                                .collect(),
+                        );
+                    } else if g.changesets.len() > 0 {
+                        // we ignore these
+                    }
+                });
+            }
+        }
+
+        Ok(File {
+            nodes: nodes,
+            ways: ways,
+            relations: relations,
+        })
     }
 }
 
