@@ -23,7 +23,12 @@ fn main() {
         None => panic!("what?"),
     };
 
-    println!("{:?}", data);
+    println!(
+        "OSM File: {} nodes, {} ways, {} relations",
+        data.nodes.len(),
+        data.ways.len(),
+        data.relations.len()
+    );
 
     println!("pronto!");
 }

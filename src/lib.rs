@@ -191,11 +191,11 @@ enum Element {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct File {
     #[serde(rename = "node")]
-    nodes: Vec<Node>,
+    pub nodes: Vec<Node>,
     #[serde(rename = "way")]
-    ways: Vec<Way>,
+    pub ways: Vec<Way>,
     #[serde(rename = "relation")]
-    relations: Vec<Relation>,
+    pub relations: Vec<Relation>,
 }
 
 impl File {
@@ -207,44 +207,37 @@ impl File {
     /// Parse protobuf source.
     pub fn from_proto_reader(r: impl std::io::Read + 'static) -> std::io::Result<Self> {
         // allocate for data
-        let mut nodes: Vec<Node> = Vec::with_capacity(10000000);
-        let mut ways: Vec<Way> = Vec::with_capacity(10000000);
-        let mut relations: Vec<Relation> = Vec::with_capacity(1000);
+        let mut nodes: Vec<Node> = Vec::with_capacity(1000000);
+        let mut ways: Vec<Way> = Vec::with_capacity(100000);
+        let mut relations: Vec<Relation> = Vec::with_capacity(100000);
 
         // iterate over all file blocks in the reader
-        let blocks = proto::FileBlockIterator::from_reader(r);
-        for block in blocks {
+        proto::FileBlockIterator::from_reader(r).for_each(|block| {
             // if file block it means we got data
             if let proto::FileBlock::Primitive(b) = block {
                 let st = proto::parse_str_tbl(&b);
 
                 b.primitivegroup.iter().for_each(|g| {
                     if let Some(dense) = &g.dense {
-                        nodes.append(&mut Node::from_proto_dense_nodes(&dense, &st, &b).collect());
+                        Node::from_proto_dense_nodes(&dense, &st, &b).for_each(|n| nodes.push(n));
                     } else if g.ways.len() > 0 {
-                        ways.append(&mut g.ways.iter().map(|w| Way::from_proto(&w, &st)).collect());
+                        g.ways
+                            .iter()
+                            .for_each(|w| ways.push(Way::from_proto(&w, &st)));
                     } else if g.relations.len() > 0 {
-                        relations.append(
-                            &mut g
-                                .relations
-                                .iter()
-                                .map(|r| Relation::from_proto(&r, &st))
-                                .collect(),
-                        );
+                        g.relations
+                            .iter()
+                            .for_each(|r| relations.push(Relation::from_proto(&r, &st)));
                     } else if g.nodes.len() > 0 {
-                        nodes.append(
-                            &mut g
-                                .nodes
-                                .iter()
-                                .map(|n| Node::from_proto(&n, &st, &b))
-                                .collect(),
-                        );
+                        g.nodes
+                            .iter()
+                            .for_each(|n| nodes.push(Node::from_proto(&n, &st, &b)));
                     } else if g.changesets.len() > 0 {
                         // we ignore these
                     }
                 });
             }
-        }
+        });
 
         Ok(File {
             nodes: nodes,
