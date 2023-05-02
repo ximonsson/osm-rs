@@ -9,6 +9,8 @@ pub struct Tag {
 }
 
 impl Tag {
+    /// Create vector of tags from protobuf encoded source specifically for dense encoded
+    /// nodes.
     fn from_dense_nodes_kvs(kvs: &Vec<i32>, st: &Vec<String>, j: &mut usize) -> Vec<Self> {
         let mut i: usize = *j;
         let mut k: &str;
@@ -34,6 +36,7 @@ impl Tag {
         tags
     }
 
+    /// Create vector of tags from key value pair coming from protobuf encoded source.
     fn from_kvs(k: &Vec<u32>, v: &Vec<u32>, st: &Vec<String>) -> Vec<Self> {
         std::iter::zip(k, v)
             .map(|(k, v)| Tag {
@@ -54,15 +57,19 @@ pub struct Node {
 }
 
 impl Node {
+    /// Create Iterator of Nodes from encoded dense nodes from protobuf source.
     fn from_proto_dense_nodes<'a>(
         dense: &'a proto::items::DenseNodes,
         st: &'a Vec<String>,
         pb: &'a proto::items::PrimitiveBlock,
     ) -> impl std::iter::Iterator<Item = Self> + 'a {
+        // increment values
         let mut id: i64 = 0;
         let mut lat: i64 = 0;
         let mut lon: i64 = 0;
 
+        // TODO
+        // should these values not unwrap to their default values already?
         let offlon = pb.lon_offset.unwrap_or(0) as i64;
         let offlat = pb.lat_offset.unwrap_or(0) as i64;
         let granularity = pb.granularity.unwrap_or(100) as i64;
@@ -86,11 +93,14 @@ impl Node {
         )
     }
 
+    /// Create new Node from protobuf encoded node.
     fn from_proto(
         n: &proto::items::Node,
         st: &Vec<String>,
         pb: &proto::items::PrimitiveBlock,
     ) -> Self {
+        // TODO
+        // should these values not unwrap to their default values already?
         let offlon = pb.lon_offset.unwrap_or(0) as i64;
         let offlat = pb.lat_offset.unwrap_or(0) as i64;
         let granularity = pb.granularity.unwrap_or(100) as i64;
@@ -119,6 +129,7 @@ pub struct Way {
 }
 
 impl Way {
+    /// Return Way element from protobuf encoded source.
     fn from_proto(w: &proto::items::Way, st: &Vec<String>) -> Self {
         let mut i: i64 = 0;
         let ns = w
@@ -146,6 +157,7 @@ pub struct Member {
 }
 
 impl Member {
+    /// Return vector of members belonging to a protobuf encoded Relation.
     fn from_proto(
         ids: &Vec<i64>,
         roles: &Vec<i32>,
@@ -179,6 +191,7 @@ pub struct Relation {
 }
 
 impl Relation {
+    /// New Relation from protobuf encoded source.
     fn from_proto(r: &proto::items::Relation, st: &Vec<String>) -> Self {
         Relation {
             id: r.id,
@@ -237,7 +250,6 @@ impl File {
                             .iter()
                             .for_each(|r| relations.push(Relation::from_proto(&r, &st)));
                     } else if g.nodes.len() > 0 {
-                        println!("normal nodes???");
                         g.nodes
                             .iter()
                             .for_each(|n| nodes.push(Node::from_proto(&n, &st, &b)));
