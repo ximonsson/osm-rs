@@ -13,7 +13,8 @@ impl Tag {
         let mut i: usize = *j;
         let mut k: &str;
         let mut v: &str;
-        let mut tags: Vec<Self> = Vec::with_capacity(kvs.len());
+
+        let mut tags: Vec<Self> = vec![];
 
         while i < kvs.len() {
             if kvs[i] == 0 {
@@ -29,7 +30,6 @@ impl Tag {
                 v: v.into(),
             });
         }
-
         *j = i;
         tags
     }
@@ -63,6 +63,10 @@ impl Node {
         let mut lat: i64 = 0;
         let mut lon: i64 = 0;
 
+        let offlon = pb.lon_offset.unwrap_or(0) as i64;
+        let offlat = pb.lat_offset.unwrap_or(0) as i64;
+        let granularity = pb.granularity.unwrap_or(100) as i64;
+
         // tag index
         let mut ti: usize = 0;
 
@@ -74,8 +78,8 @@ impl Node {
 
                 Node {
                     id: id,
-                    lat: coord!(lat, pb.lat_offset, pb.granularity),
-                    lon: coord!(lon, pb.lon_offset, pb.granularity),
+                    lat: coord!(lat, offlat, granularity),
+                    lon: coord!(lon, offlon, granularity),
                     tags: Tag::from_dense_nodes_kvs(&dense.keys_vals, &st, &mut ti),
                 }
             },
@@ -87,11 +91,15 @@ impl Node {
         st: &Vec<String>,
         pb: &proto::items::PrimitiveBlock,
     ) -> Self {
+        let offlon = pb.lon_offset.unwrap_or(0) as i64;
+        let offlat = pb.lat_offset.unwrap_or(0) as i64;
+        let granularity = pb.granularity.unwrap_or(100) as i64;
+
         Node {
             id: n.id,
             tags: Tag::from_kvs(&n.keys, &n.vals, st),
-            lat: coord!(n.lat, pb.lat_offset, pb.granularity),
-            lon: coord!(n.lon, pb.lon_offset, pb.granularity),
+            lat: coord!(n.lat, offlat, granularity),
+            lon: coord!(n.lon, offlon, granularity),
         }
     }
 }
@@ -207,9 +215,9 @@ impl File {
     /// Parse protobuf source.
     pub fn from_proto_reader(r: impl std::io::Read + 'static) -> std::io::Result<Self> {
         // allocate for data
-        let mut nodes: Vec<Node> = Vec::with_capacity(1000000);
-        let mut ways: Vec<Way> = Vec::with_capacity(100000);
-        let mut relations: Vec<Relation> = Vec::with_capacity(100000);
+        let mut nodes: Vec<Node> = vec![];
+        let mut ways: Vec<Way> = vec![];
+        let mut relations: Vec<Relation> = vec![];
 
         // iterate over all file blocks in the reader
         proto::FileBlockIterator::from_reader(r).for_each(|block| {
@@ -229,6 +237,7 @@ impl File {
                             .iter()
                             .for_each(|r| relations.push(Relation::from_proto(&r, &st)));
                     } else if g.nodes.len() > 0 {
+                        println!("normal nodes???");
                         g.nodes
                             .iter()
                             .for_each(|n| nodes.push(Node::from_proto(&n, &st, &b)));

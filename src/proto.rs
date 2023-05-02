@@ -11,7 +11,7 @@ use std::io::{Read, Result};
 #[macro_export]
 macro_rules! coord {
     ($x: expr, $offset: expr, $granularity: expr) => {
-        0.000000001 * ($offset.unwrap_or(0) as i64 + $granularity.unwrap_or(100) as i64 * $x) as f64
+        0.000000001 * ($offset + $granularity * $x) as f64
     };
 }
 
