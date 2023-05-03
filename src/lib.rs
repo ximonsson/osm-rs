@@ -221,8 +221,8 @@ pub struct File {
 
 impl File {
     /// Parse OSM-XML source.
-    pub fn from_reader(r: impl std::io::BufRead) -> Result<Self, DeError> {
-        from_reader(r)
+    pub fn from_reader(r: impl std::io::Read) -> Result<Self, DeError> {
+        from_reader(std::io::BufReader::new(r))
     }
 
     /// Parse protobuf source.
