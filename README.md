@@ -26,3 +26,7 @@ This crate is mostly a learning experience with rust so I do not take this too s
 ### Multi-threaded Reading of Protobuf Files
 
 The loading of protobuf encoded files is quite fast as it is, loading all data in Sweden takes about 15 seconds, but I would like to try and make it event faster using multi-threading.
+
+### Better Docs
+
+Need to read up on how you are supposed to write good docs for rust crates.
