@@ -1,10 +1,8 @@
-use quick_xml;
-
-fn read_pbf(fp: &str) -> std::io::Result<osm::File> {
+fn read_pbf(fp: &str) -> osm::Result<osm::File> {
     osm::File::from_proto_reader(std::fs::File::open(fp).unwrap())
 }
 
-fn read_xml(fp: &str) -> Result<osm::File, quick_xml::de::DeError> {
+fn read_xml(fp: &str) -> osm::Result<osm::File> {
     osm::File::from_reader(std::fs::File::open(fp).unwrap())
 }
 

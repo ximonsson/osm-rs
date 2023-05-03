@@ -1,6 +1,13 @@
-use quick_xml::de::{from_reader, DeError};
+use quick_xml::de::from_reader;
 use serde::{Deserialize, Serialize};
 pub mod proto;
+
+#[derive(Debug)]
+pub enum Error {
+    XMLParseError(String),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Tag {
@@ -221,12 +228,15 @@ pub struct File {
 
 impl File {
     /// Parse OSM-XML source.
-    pub fn from_reader(r: impl std::io::Read) -> Result<Self, DeError> {
-        from_reader(std::io::BufReader::new(r))
+    pub fn from_reader(r: impl std::io::Read) -> Result<Self> {
+        match from_reader(std::io::BufReader::new(r)) {
+            Ok(f) => Ok(f),
+            Err(e) => Err(Error::XMLParseError(format!("XML parse error: {}", e))),
+        }
     }
 
     /// Parse protobuf source.
-    pub fn from_proto_reader(r: impl std::io::Read + 'static) -> std::io::Result<Self> {
+    pub fn from_proto_reader(r: impl std::io::Read + 'static) -> Result<Self> {
         // allocate for data
         let mut nodes: Vec<Node> = vec![];
         let mut ways: Vec<Way> = vec![];
@@ -269,4 +279,18 @@ impl File {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_proto() -> Result<()> {
+        File::from_proto_reader(std::fs::File::open("./data/andorra-latest.osm.pbf").unwrap())?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_osm_xml() -> Result<()> {
+        File::from_reader(std::fs::File::open("./data/friesenstrasse.osm").unwrap())?;
+        Ok(())
+    }
+}
