@@ -23,10 +23,6 @@ You can check `src/main.rs` for example on how to parse data. When running `carg
 
 This crate is mostly a learning experience with rust so I do not take this too seriously.
 
-### Unit Tests
-
-Goes without saying....
-
 ### Multi-threaded Reading of Protobuf Files
 
 The loading of protobuf encoded files is quite fast as it is, loading all data in Sweden takes about 15 seconds, but I would like to try and make it event faster using multi-threading.
