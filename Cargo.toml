@@ -13,3 +13,6 @@ flate2 = "1.0"
 
 [build-dependencies]
 prost-build = "0.11"
+
+[lib]
+crate-type = ["staticlib", "lib"]
