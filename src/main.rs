@@ -1,8 +1,7 @@
 use quick_xml;
 
 fn read_pbf(fp: &str) -> std::io::Result<osm::File> {
-    let f = std::fs::File::open(fp).unwrap();
-    osm::File::from_proto_reader(f)
+    osm::File::from_proto_reader(std::fs::File::open(fp).unwrap())
 }
 
 fn read_xml(fp: &str) -> Result<osm::File, quick_xml::de::DeError> {
