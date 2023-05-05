@@ -210,7 +210,7 @@ impl Relation {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-enum Element {
+pub enum Element {
     Node(Node),
     Way(Way),
     Relation(Relation),
