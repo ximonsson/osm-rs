@@ -209,14 +209,6 @@ impl Relation {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Element {
-    Node(Node),
-    Way(Way),
-    Relation(Relation),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct File {
     #[serde(rename = "node")]
     pub nodes: Vec<Node>,
@@ -275,6 +267,42 @@ impl File {
             ways: ways,
             relations: relations,
         })
+    }
+}
+
+pub trait Element {
+    fn id(&self) -> i64;
+
+    fn tags(&self) -> &Vec<Tag>;
+}
+
+impl Element for Node {
+    fn id(&self) -> i64 {
+        self.id
+    }
+
+    fn tags(&self) -> &Vec<Tag> {
+        &self.tags
+    }
+}
+
+impl Element for Way {
+    fn id(&self) -> i64 {
+        self.id
+    }
+
+    fn tags(&self) -> &Vec<Tag> {
+        &self.tags
+    }
+}
+
+impl Element for Relation {
+    fn id(&self) -> i64 {
+        self.id
+    }
+
+    fn tags(&self) -> &Vec<Tag> {
+        &self.tags
     }
 }
 
