@@ -65,7 +65,7 @@ pub struct Node {
 
 impl Node {
     /// Create Iterator of Nodes from encoded dense nodes from protobuf source.
-    fn from_proto_dense_nodes<'a>(
+    pub fn from_proto_dense_nodes<'a>(
         dense: &'a proto::items::DenseNodes,
         st: &'a Vec<String>,
         pb: &'a proto::items::PrimitiveBlock,
@@ -101,7 +101,7 @@ impl Node {
     }
 
     /// Create new Node from protobuf encoded node.
-    fn from_proto(
+    pub fn from_proto(
         n: &proto::items::Node,
         st: &Vec<String>,
         pb: &proto::items::PrimitiveBlock,
@@ -137,7 +137,7 @@ pub struct Way {
 
 impl Way {
     /// Return Way element from protobuf encoded source.
-    fn from_proto(w: &proto::items::Way, st: &Vec<String>) -> Self {
+    pub fn from_proto(w: &proto::items::Way, st: &Vec<String>) -> Self {
         let mut i: i64 = 0;
         let ns = w
             .refs
@@ -165,7 +165,7 @@ pub struct Member {
 
 impl Member {
     /// Return vector of members belonging to a protobuf encoded Relation.
-    fn from_proto(
+    pub fn from_proto(
         ids: &Vec<i64>,
         roles: &Vec<i32>,
         types: &Vec<i32>,
@@ -199,7 +199,7 @@ pub struct Relation {
 
 impl Relation {
     /// New Relation from protobuf encoded source.
-    fn from_proto(r: &proto::items::Relation, st: &Vec<String>) -> Self {
+    pub fn from_proto(r: &proto::items::Relation, st: &Vec<String>) -> Self {
         Relation {
             id: r.id,
             tags: Tag::from_kvs(&r.keys, &r.vals, st),
