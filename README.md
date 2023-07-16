@@ -27,6 +27,8 @@ This crate is mostly a learning experience with rust so I do not take this too s
 
 The loading of protobuf encoded files is quite fast as it is, loading all data in Sweden takes about 15 seconds, but I would like to try and make it event faster using multi-threading.
 
+[Here](https://github.com/ximonsson/osm2parquet/blob/2663da5dfeff2fca8b8c3181309c52bf4fe97050/src/main.rs#L5-L184) is an example of where i do this iterating over a `osm::proto::FileBlockIterator`. That code is however a bit long and messy maybe. Will just need to clean it up a little.
+
 ### Better Docs
 
 Need to read up on how you are supposed to write good docs for rust crates.
