@@ -84,7 +84,10 @@ impl FileBlockIterator {
         // read blob header size
         let n = self.read(BYTES_BLOB_HEADER_SIZE).unwrap();
         if n == 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, "lol"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Could not read header!",
+            ));
         }
         let bhs: u32 = u32::from_be_bytes(
             self.buf[..BYTES_BLOB_HEADER_SIZE as usize]
